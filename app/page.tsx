@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import UserButton from "@/modules/auth/components/user-button";
 import Image from "next/image";
 
 export default async function Home() {
@@ -7,6 +8,9 @@ export default async function Home() {
       <Button >
         Get started
       </Button>
+      <UserButton/>
+
+      {/* <UserButton/> */}
     </div>
   );
 }
