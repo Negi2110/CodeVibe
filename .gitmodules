@@ -1,0 +1,3 @@
+[submodule "vibecode-starters"]
+	path = vibecode-starters
+	url = https://github.com/stackblitz/starters.git
