@@ -7,9 +7,10 @@ import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TooltipProvider, TooltipTrigger, Tooltip, TooltipContent } from "@/components/ui/tooltip";
 import LoadingStep from "@/modules/playground/components/loader";
-import PlaygroundEditor from "@/modules/playground/components/playground-editor";
+import {PlaygroundEditor} from "@/modules/playground/components/playground-editor";
 import { TemplateFileTree } from "@/modules/playground/components/playground-explorer";
 import ToggleAI from "@/modules/playground/components/toggle-ai";
+import { useAISuggestions } from "@/modules/playground/hooks/useAiSuggestion";
 import { useFileExplorer } from "@/modules/playground/hooks/useFileExplorer";
 import { usePlayground } from "@/modules/playground/hooks/usePlayground";
 import { findFilePath } from "@/modules/playground/lib";
@@ -27,6 +28,9 @@ const MainPLaygroundPage = () => {
     const [isPreviewVisible, setIsPreviewVisible] = useState(true);
 
     const { playgroundData, templateData, isLoading, error, saveTemplateData } = usePlayground(id);
+
+    const aiSuggestions = useAISuggestions();
+
     const {
         setTemplateData,
         setActiveFileId,
@@ -140,122 +144,122 @@ const MainPLaygroundPage = () => {
         openFile(file)
 
     }
-   
-  const handleSave = useCallback(
-    async (fileId?: string) => {
-      const targetFileId = fileId || activeFileId;
-      if (!targetFileId) return;
 
-      const fileToSave = openFiles.find((f) => f.id === targetFileId);
+    const handleSave = useCallback(
+        async (fileId?: string) => {
+            const targetFileId = fileId || activeFileId;
+            if (!targetFileId) return;
 
-      if (!fileToSave) return;
+            const fileToSave = openFiles.find((f) => f.id === targetFileId);
 
-      const latestTemplateData = useFileExplorer.getState().templateData;
-      if (!latestTemplateData) return
+            if (!fileToSave) return;
 
-      try {
-            const filePath = findFilePath(fileToSave, latestTemplateData);
-        if (!filePath) {
-          toast.error(
-            `Could not find path for file: ${fileToSave.filename}.${fileToSave.fileExtension}`
-          );
-          return;
-        }
+            const latestTemplateData = useFileExplorer.getState().templateData;
+            if (!latestTemplateData) return
 
-   const updatedTemplateData = JSON.parse(
-          JSON.stringify(latestTemplateData)
-        );
+            try {
+                const filePath = findFilePath(fileToSave, latestTemplateData);
+                if (!filePath) {
+                    toast.error(
+                        `Could not find path for file: ${fileToSave.filename}.${fileToSave.fileExtension}`
+                    );
+                    return;
+                }
 
-        // @ts-ignore
-          const updateFileContent = (items: any[]) =>
-            // @ts-ignore
-          items.map((item) => {
-            if ("folderName" in item) {
-              return { ...item, items: updateFileContent(item.items) };
-            } else if (
-              item.filename === fileToSave.filename &&
-              item.fileExtension === fileToSave.fileExtension
-            ) {
-              return { ...item, content: fileToSave.content };
+                const updatedTemplateData = JSON.parse(
+                    JSON.stringify(latestTemplateData)
+                );
+
+                // @ts-ignore
+                const updateFileContent = (items: any[]) =>
+                    // @ts-ignore
+                    items.map((item) => {
+                        if ("folderName" in item) {
+                            return { ...item, items: updateFileContent(item.items) };
+                        } else if (
+                            item.filename === fileToSave.filename &&
+                            item.fileExtension === fileToSave.fileExtension
+                        ) {
+                            return { ...item, content: fileToSave.content };
+                        }
+                        return item;
+                    });
+                updatedTemplateData.items = updateFileContent(
+                    updatedTemplateData.items
+                );
+
+                // Sync with WebContainer
+                if (writeFileSync) {
+                    await writeFileSync(filePath, fileToSave.content);
+                    lastSyncedContent.current.set(fileToSave.id, fileToSave.content);
+                    if (instance && instance.fs) {
+                        await instance.fs.writeFile(filePath, fileToSave.content);
+                    }
+                }
+
+                const newTemplateData = await saveTemplateData(updatedTemplateData);
+                setTemplateData(newTemplateData || updatedTemplateData);
+                // Update open files
+                const updatedOpenFiles = openFiles.map((f) =>
+                    f.id === targetFileId
+                        ? {
+                            ...f,
+                            content: fileToSave.content,
+                            originalContent: fileToSave.content,
+                            hasUnsavedChanges: false,
+                        }
+                        : f
+                );
+                setOpenFiles(updatedOpenFiles);
+
+                toast.success(
+                    `Saved ${fileToSave.filename}.${fileToSave.fileExtension}`
+                );
+            } catch (error) {
+                console.error("Error saving file:", error);
+                toast.error(
+                    `Failed to save ${fileToSave.filename}.${fileToSave.fileExtension}`
+                );
+                throw error;
             }
-            return item;
-          });
-        updatedTemplateData.items = updateFileContent(
-          updatedTemplateData.items
-        );
+        },
+        [
+            activeFileId,
+            openFiles,
+            writeFileSync,
+            instance,
+            saveTemplateData,
+            setTemplateData,
+            setOpenFiles,
+        ]
+    );
+    const handleSaveAll = async () => {
+        const unsavedFiles = openFiles.filter((f) => f.hasUnsavedChanges);
 
-          // Sync with WebContainer
-        if (writeFileSync) {
-          await writeFileSync(filePath, fileToSave.content);
-          lastSyncedContent.current.set(fileToSave.id, fileToSave.content);
-          if (instance && instance.fs) {
-            await instance.fs.writeFile(filePath, fileToSave.content);
-          }
+        if (unsavedFiles.length === 0) {
+            toast.info("No unsaved changes");
+            return;
         }
 
-           const newTemplateData = await saveTemplateData(updatedTemplateData);
-        setTemplateData(newTemplateData || updatedTemplateData);
-// Update open files
-        const updatedOpenFiles = openFiles.map((f) =>
-          f.id === targetFileId
-            ? {
-                ...f,
-                content: fileToSave.content,
-                originalContent: fileToSave.content,
-                hasUnsavedChanges: false,
-              }
-            : f
-        );
-        setOpenFiles(updatedOpenFiles);
+        try {
+            await Promise.all(unsavedFiles.map((f) => handleSave(f.id)));
+            toast.success(`Saved ${unsavedFiles.length} file(s)`);
+        } catch (error) {
+            toast.error("Failed to save some files");
+        }
+    };
 
-    toast.success(
-          `Saved ${fileToSave.filename}.${fileToSave.fileExtension}`
-        );
-      } catch (error) {
-         console.error("Error saving file:", error);
-        toast.error(
-          `Failed to save ${fileToSave.filename}.${fileToSave.fileExtension}`
-        );
-        throw error;
-      }
-    },
-    [
-      activeFileId,
-      openFiles,
-      writeFileSync,
-      instance,
-      saveTemplateData,
-      setTemplateData,
-      setOpenFiles,
-    ]
-  );
-    const handleSaveAll = async () => {
-    const unsavedFiles = openFiles.filter((f) => f.hasUnsavedChanges);
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.ctrlKey && e.key === "s") {
+                e.preventDefault()
+                handleSave()
+            }
+        }
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [handleSave]);
 
-    if (unsavedFiles.length === 0) {
-      toast.info("No unsaved changes");
-      return;
-    }
-
-    try {
-      await Promise.all(unsavedFiles.map((f) => handleSave(f.id)));
-      toast.success(`Saved ${unsavedFiles.length} file(s)`);
-    } catch (error) {
-      toast.error("Failed to save some files");
-    }
-  };
-
-   useEffect(()=>{
-    const handleKeyDown = (e:KeyboardEvent)=>{
-      if(e.ctrlKey && e.key === "s"){
-        e.preventDefault()
-        handleSave()
-      }
-    }
-     window.addEventListener("keydown", handleKeyDown);
-     return () => window.removeEventListener("keydown", handleKeyDown);
-  },[handleSave]);
-  
     if (error) {
         return (
             <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)] p-4">
@@ -321,11 +325,11 @@ const MainPLaygroundPage = () => {
                     onFileSelect={handleFileSelect}
                     selectedFile={activeFile}
                     title="File Explorer"
-                    onAddFile={wrappedHandleAddFile }
-                    onAddFolder={wrappedHandleAddFolder }
-                    onDeleteFile={wrappedHandleDeleteFile }
-                    onDeleteFolder={wrappedHandleDeleteFolder }
-                    onRenameFile={wrappedHandleRenameFile }
+                    onAddFile={wrappedHandleAddFile}
+                    onAddFolder={wrappedHandleAddFolder}
+                    onDeleteFile={wrappedHandleDeleteFile}
+                    onDeleteFolder={wrappedHandleDeleteFolder}
+                    onRenameFile={wrappedHandleRenameFile}
                     onRenameFolder={wrappedHandleRenameFolder}
                 />
                 <SidebarInset>
@@ -368,9 +372,9 @@ const MainPLaygroundPage = () => {
                                 </Tooltip>
 
                                 <ToggleAI
-                                isEnabled={false}
-                                onToggle={()=>{}}
-                                suggestionLoading={false}
+                                    isEnabled={aiSuggestions.isEnabled}
+                                    onToggle={aiSuggestions.toggleEnabled}
+                                    suggestionLoading={aiSuggestions.isLoading}
                                 />
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
@@ -451,8 +455,19 @@ const MainPLaygroundPage = () => {
                                             <ResizablePanel defaultSize={isPreviewVisible ? 50 : 100}>
                                                 <PlaygroundEditor activeFile={activeFile}
                                                     content={activeFile?.content || ""}
-                                                    onContentChange={(value) => 
-                                                        activeFileId && updateFileContent(activeFileId,value)
+                                                    onContentChange={(value) =>
+                                                        activeFileId && updateFileContent(activeFileId, value)
+                                                    }
+                                                    suggestion={aiSuggestions.suggestion}
+                                                    suggestionLoading={aiSuggestions.isLoading}
+                                                    suggestionPosition={aiSuggestions.position}
+                                                    onAcceptSuggestion={(editor, monaco) => aiSuggestions.acceptSuggestion(editor, monaco)}
+                                                    
+                                                    onRejectSuggestion={(editor) =>
+                                                        aiSuggestions.rejectSuggestion(editor)
+                                                    }
+                                                    onTriggerSuggestion={(type, editor) =>
+                                                        aiSuggestions.fetchSuggestion(type, editor)
                                                     }
                                                 />
                                             </ResizablePanel>
