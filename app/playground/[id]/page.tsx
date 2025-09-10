@@ -9,6 +9,7 @@ import { TooltipProvider, TooltipTrigger, Tooltip, TooltipContent } from "@/comp
 import LoadingStep from "@/modules/playground/components/loader";
 import PlaygroundEditor from "@/modules/playground/components/playground-editor";
 import { TemplateFileTree } from "@/modules/playground/components/playground-explorer";
+import ToggleAI from "@/modules/playground/components/toggle-ai";
 import { useFileExplorer } from "@/modules/playground/hooks/useFileExplorer";
 import { usePlayground } from "@/modules/playground/hooks/usePlayground";
 import { findFilePath } from "@/modules/playground/lib";
@@ -366,9 +367,11 @@ const MainPLaygroundPage = () => {
                                     <TooltipContent>Save All (Ctrl+Shift+s)</TooltipContent>
                                 </Tooltip>
 
-                                <Button variant={"default"} size={'icon'} >
-                                    <Bot className="size-4" />
-                                </Button>
+                                <ToggleAI
+                                isEnabled={false}
+                                onToggle={()=>{}}
+                                suggestionLoading={false}
+                                />
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                         <Button size="sm" variant="outline">
